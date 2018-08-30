@@ -39,6 +39,8 @@ topic = "/home/smoke/livingroom"
 mqtt_user = "MQTTuser"
 mqtt_pw = "MQTTpassword"
 
+read_power = True
+
 led = machine.Pin(2,machine.Pin.OUT)
 led.value(0)
 
@@ -82,18 +84,33 @@ def do_connect():
         led.value(0) # on
     print('network config:', wlan.ifconfig())
 
+def mean(numbers):
+    return float(sum(numbers)) / max(len(numbers), 1)
+
 c = MQTTClient(DEV_ID, mqtt_server, user=mqtt_user, password=mqtt_pw)
 #ap.active(False)
-
+adc = machine.ADC(0)
 # run notification forever, notify every INTERVAL seconds
 while True:
     current_time = time.ticks_ms()
     do_connect()
     print("sending smoke alarm to MQTT")
     led.value(0)
+    if read_power:
+        power_vals = []
+        voltage = 0
+        for i in range(0,100):
+            time.sleep_ms(1)
+            power_vals.append(adc.read())
+        voltage = mean(power_vals)*3.3*3/1024 # voltage of battery
+        # less than 7 V is dangerous...
     try:
         c.connect()
         print("publishing: ")
+        if read_power:
+            print("power: {} V".format(voltage))
+            c.publish(topic + "/voltage", str(voltage), retain=True)
+            read_power = False # only read power at startup
         c.publish(topic, "smoke")
         c.disconnect()
     except:
